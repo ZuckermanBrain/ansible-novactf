@@ -1,2 +1,98 @@
 ---
 # tasks file for app-novactf
+
+- name: Check for installation of Anaconda
+  become: yes
+  stat:
+    path: '{{ novactf_install_dir }}/bin/conda'
+  changed_when: false
+  register: anaconda_conda_binary
+
+- name: Check for previous installation of novaCTF
+  become: yes
+  stat:
+    path: "{{ novactf_install_dir }}/bin/novaCTF"
+  changed_when: false
+  register: novaCTF_binary
+
+- when: not anaconda_conda_binary.stat.exists
+  block:
+    - name: Download Anaconda installer.
+      become: yes
+      get_url:
+        url: '{{anaconda_installer_url}}'
+        dest: /tmp/{{anaconda_installer_sh}}
+        timeout: '{{anaconda_timeout_seconds}}'
+        checksum: '{{anaconda_checksum}}'
+        mode: 0755
+
+    - name: Run Anaconda installer.
+      become: yes
+      command: bash /tmp/{{anaconda_installer_sh}} -b -f -p {{novactf_install_dir}}
+
+  always:
+    - name: Delete Anaconda installer.
+      become: yes
+      file:
+        path: /tmp/{{anaconda_installer_sh}}
+        state: absent
+
+- name: Add conda base environment file.
+  become: yes
+  copy:
+    content: '{{ anaconda_base_env | to_nice_yaml }}'
+    dest: /tmp/anaconda-base.yml
+  when: anaconda_base_env is defined
+
+- name: Install additional packages to universal install / add default packages to shared package cache.
+  become: yes
+  command: '{{novactf_install_dir}}/bin/conda env update -f=/tmp/anaconda-base.yml'
+  when: anaconda_base_env is defined
+
+- name: Remove conda base environment file.
+  become: yes
+  file:
+    path: /tmp/anaconda-base.yml
+    state: absent
+  when: anaconda_base_env is defined
+
+- name: Ensure that git is installed.
+  package:
+    name: git
+    state: present
+  become: yes
+
+- name: Create g++ symlink
+  file:
+    src: /opt/novactf/bin/x86_64-conda_cos6-linux-gnu-g++
+    dest: /opt/novactf/bin/g++
+    state: link
+
+- name: Create gcc symlink
+  file:
+    src: /opt/novactf/bin/x86_64-conda_cos6-linux-gnu-gcc
+    dest: /opt/novactf/bin/gcc
+    state: link
+
+- name: Clone down the novaCTF git repo
+  git:
+    repo: "{{ novactf_clone_repo }}"
+    dest: /tmp/novactf
+    version: "{{ novactf_version }}"
+  become: yes
+  when: not novaCTF_binary.stat.exists
+
+- name: Build novaCTF
+  shell: |
+    source /opt/novactf/bin/activate
+    cd /tmp/novactf
+    make includepath="/opt/novactf/pkgs/fftw-3.3.8-h7b6447c_3/include/" libpath="/opt/novactf/pkgs/fftw-3.3.8-h7b6447c_3/lib/"
+    mv novaCTF /opt/novactf/bin
+  become: yes
+  when: not novaCTF_binary.stat.exists
+
+- name: Create novaCTF symlink in /usr/local/bin
+  file:
+    src: /opt/novactf/bin/novaCTF
+    dest: /usr/local/bin/novaCTF
+    state: link
