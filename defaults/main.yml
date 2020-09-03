@@ -57,7 +57,7 @@ anaconda_base_env:
     - xz=5.2.5=h7b6447c_0
     - yaml=0.1.7=had09818_2
     - zlib=1.2.11=h7b6447c_3
-  prefix: /opt/novactf
+  prefix: "{{ novactf_install_dir }}"
 
 novactf_clone_repo: "https://github.com/turonova/novaCTF.git"
 novactf_version: "4f134c78f17bc5c818539bb078504090a9f43194"
